@@ -4,14 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	"github.com/dragtor/urlshortner/services/shortner"
+	httputils "github.com/dragtor/urlshortner/utils"
 	"github.com/gorilla/mux"
 )
 
@@ -39,74 +40,61 @@ func (api *APIHandler) PostURLShortnerHandler(w http.ResponseWriter, r *http.Req
 	var requestData RequestData
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&requestData); err != nil {
-		http.Error(w, "Failed to parse JSON request body", http.StatusBadRequest)
+		httputils.HTTPResponseData(w, false, nil, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	defer r.Body.Close()
 
 	urlmeta, err := api.ShortnerService.CreateShortUrl(requestData.Url)
 	if err != nil {
-		http.Error(w, "Failed to parse JSON request body", http.StatusBadRequest)
+		httputils.HTTPResponseData(w, false, nil, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	response := ResponseData{
+	resp := ResponseData{
 		ShortUrl: urlmeta.GetShortUrl(),
 	}
-	jsonResponse, err := json.Marshal(response)
-	if err != nil {
-		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(jsonResponse)
-	if err != nil {
-		fmt.Println("Failed to write JSON response:", err)
-	}
-
+	httputils.HTTPResponseData(w, true, resp, "", http.StatusOK)
 }
 
 func (api *APIHandler) RedirectURLHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	shortUrl := vars["encoded-url"]
+
 	urlmeta, err := api.ShortnerService.GetSourceUrlForShortUrl(shortUrl)
 	if err != nil {
-		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
+		httputils.HTTPResponseData(w, false, nil, err.Error(), http.StatusNotFound)
 		return
 	}
+
 	http.Redirect(w, r, urlmeta.GetSourceUrl(), http.StatusSeeOther)
 }
 
 func (api *APIHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
-	data := map[string]string{"message": "Ok"}
-	json.NewEncoder(w).Encode(data)
+	httputils.HTTPResponseData(w, true, "ok", "", http.StatusOK)
 }
 
+const (
+	DEFAULT_HEADCOUNT = 3
+)
+
 func (api *APIHandler) GetMetrics(w http.ResponseWriter, r *http.Request) {
-	metrics, err := api.ShortnerService.GetMetrics(3)
+	queryParams := r.URL.Query()
+	headCount := queryParams.Get("headcount")
+	headcnt, err := strconv.Atoi(headCount)
 	if err != nil {
-		http.Error(w, "Failed to fetch metrics", http.StatusInternalServerError)
+		headcnt = DEFAULT_HEADCOUNT
+	}
+	metrics, err := api.ShortnerService.GetMetrics(headcnt)
+	if err != nil {
+		httputils.HTTPResponseData(w, true, nil, err.Error(), http.StatusInternalServerError)
+		return
 	}
 	var resp MetricsEndpointResponseData
 	resp.Data = make([]*DomainMetrics, 0)
 	for _, m := range metrics {
 		resp.Data = append(resp.Data, &DomainMetrics{Domain: m.GetDomain(), Count: m.GetCount()})
 	}
-	jsonResponse, err := json.Marshal(resp)
-	if err != nil {
-		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_, err = w.Write(jsonResponse)
-	if err != nil {
-		fmt.Println("Failed to write JSON response:", err)
-	}
-
+	httputils.HTTPResponseData(w, true, resp, "", http.StatusOK)
 }
 
 func main() {
