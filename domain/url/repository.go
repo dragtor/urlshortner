@@ -9,7 +9,7 @@ var (
 )
 
 type Repository interface {
-	GetByShortUrl(shortUrl string) *UrlMeta
-	Add(UrlMeta) error
-	GetBySourceUrl(urlHash string) error
+	GetByShortUrl(shortUrl string) (*UrlMeta, error)
+	Add(urlmeta *UrlMeta) error
+	GetBySourceUrl(urlHash string) (*UrlMeta, error)
 }
