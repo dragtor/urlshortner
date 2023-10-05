@@ -2,19 +2,27 @@ package shortner
 
 import (
 	"errors"
-	"fmt"
 	"hash/crc32"
+	"log"
+	neturl "net/url"
 
 	"github.com/catinello/base62"
 	"github.com/dragtor/urlshortner/domain/url"
 	"github.com/dragtor/urlshortner/domain/url/memory"
+	"github.com/dragtor/urlshortner/domain/urlmetrics"
+	metricsMemory "github.com/dragtor/urlshortner/domain/urlmetrics/memory"
 )
 
 type ShortnerConfiguration func(ss *ShortnerService) error
 
 type ShortnerService struct {
-	urlMeta url.Repository
+	urlMeta    url.Repository
+	urlMetrics urlmetrics.Repository
 }
+
+const (
+	EVENT_CREATE_NEW_SHORTURL = "EVENT_CREATE_NEW_SHORTURL"
+)
 
 func NewShortnerService(cfgs ...ShortnerConfiguration) (*ShortnerService, error) {
 	ss := &ShortnerService{}
@@ -30,6 +38,7 @@ func NewShortnerService(cfgs ...ShortnerConfiguration) (*ShortnerService, error)
 func WithMemoryUrlRepository(ss *ShortnerService) ShortnerConfiguration {
 	return func(ss *ShortnerService) error {
 		ss.urlMeta = memory.New()
+		ss.urlMetrics = metricsMemory.New()
 		return nil
 	}
 }
@@ -59,7 +68,6 @@ func (ss *ShortnerService) CreateShortUrl(sourceUrl string) (*url.UrlMeta, error
 	}
 	crc32Encoding := generateCRC32Encoding(sourceUrl)
 	shortUrl := base62.Encode(int(crc32Encoding))
-	fmt.Println(shortUrl)
 	urlmeta, err := url.NewUrlMeta(sourceUrl, shortUrl)
 	if err != nil {
 		return nil, err
@@ -74,6 +82,10 @@ func (ss *ShortnerService) CreateShortUrl(sourceUrl string) (*url.UrlMeta, error
 	}
 	if err != nil {
 		return nil, err
+	}
+	err = ss.UpdateMetrics(EVENT_CREATE_NEW_SHORTURL, sourceUrl)
+	if err != nil {
+		log.Println("Failed to update ")
 	}
 	return urlmeta, nil
 }
@@ -95,4 +107,53 @@ func (ss *ShortnerService) GetSourceUrlForShortUrl(shortUrl string) (*url.UrlMet
 		return nil, err
 	}
 	return urlmeta, nil
+}
+
+func getDomainName(URL string) (string, error) {
+	parsedURL, err := neturl.Parse(URL)
+	if err != nil {
+		return "", err
+	}
+
+	return parsedURL.Host, nil
+}
+
+func (ss *ShortnerService) GetMetrics(headCount int) ([]*urlmetrics.Metrics, error) {
+	mts, err := ss.urlMetrics.GetTopCount(headCount)
+	if err != nil {
+		return nil, err
+	}
+	return mts, nil
+}
+
+func (ss *ShortnerService) UpdateMetrics(event, url string) error {
+	host, err := getDomainName(url)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	var metrics *urlmetrics.Metrics
+	_, err = ss.urlMetrics.GetMetrics(host)
+	if err == metricsMemory.ErrDomainNotFound {
+		metrics = urlmetrics.NewMetrics(host)
+		metrics.IncrementCount()
+		err = ss.urlMetrics.SetMetrics(host, metrics)
+		if err != nil {
+			log.Println(err)
+			return err
+		}
+		return nil
+	}
+	metrics, err = ss.urlMetrics.GetMetrics(host)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	metrics.IncrementCount()
+	err = ss.urlMetrics.SetMetrics(host, metrics)
+	if err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
 }

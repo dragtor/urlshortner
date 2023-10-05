@@ -26,6 +26,15 @@ type ResponseData struct {
 	ShortUrl string `json:"shortUrl"`
 }
 
+type DomainMetrics struct {
+	Domain string `json:"domain"`
+	Count  int    `json:"count"`
+}
+
+type MetricsEndpointResponseData struct {
+	Data []*DomainMetrics `json:"data"`
+}
+
 func (api *APIHandler) PostURLShortnerHandler(w http.ResponseWriter, r *http.Request) {
 	var requestData RequestData
 	decoder := json.NewDecoder(r.Body)
@@ -34,7 +43,6 @@ func (api *APIHandler) PostURLShortnerHandler(w http.ResponseWriter, r *http.Req
 		return
 	}
 	defer r.Body.Close()
-	fmt.Println(requestData)
 
 	urlmeta, err := api.ShortnerService.CreateShortUrl(requestData.Url)
 	if err != nil {
@@ -76,6 +84,31 @@ func (api *APIHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(data)
 }
 
+func (api *APIHandler) GetMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics, err := api.ShortnerService.GetMetrics(3)
+	if err != nil {
+		http.Error(w, "Failed to fetch metrics", http.StatusInternalServerError)
+	}
+	var resp MetricsEndpointResponseData
+	resp.Data = make([]*DomainMetrics, 0)
+	for _, m := range metrics {
+		resp.Data = append(resp.Data, &DomainMetrics{Domain: m.GetDomain(), Count: m.GetCount()})
+	}
+	jsonResponse, err := json.Marshal(resp)
+	if err != nil {
+		http.Error(w, "Failed to marshal JSON response", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_, err = w.Write(jsonResponse)
+	if err != nil {
+		fmt.Println("Failed to write JSON response:", err)
+	}
+
+}
+
 func main() {
 	var wait time.Duration
 	flag.DurationVar(&wait, "graceful-timeout", time.Second*15, "the duration for which the server gracefully wait for existing connections to finish - e.g. 15s or 1m")
@@ -91,6 +124,7 @@ func main() {
 	router.HandleFunc("/urlshortnerservice/v1/healthcheck", api.HealthCheck).Methods("GET")
 	router.HandleFunc("/urlshortnerservice/v1/url", api.PostURLShortnerHandler).Methods("POST")
 	router.HandleFunc("/{encoded-url}", api.RedirectURLHandler).Methods("GET")
+	router.HandleFunc("/urlshortnerservice/v1/metrics", api.GetMetrics).Methods("GET")
 
 	srv := &http.Server{
 		Handler:      router,

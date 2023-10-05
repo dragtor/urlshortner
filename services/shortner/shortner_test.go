@@ -57,10 +57,13 @@ func Test_Shortner(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if urlmetaResponse.GetShortUrl() != urlmeta.GetShortUrl() {
+	if urlmetaResponse.GetShortUrl() != urlmeta2.GetShortUrl() {
 		fmt.Println("db url : ", urlmetaResponse.GetShortUrl())
 		fmt.Println("db url : ", urlmeta.GetShortUrl())
 		t.Fatal("Url not matching ")
 	}
+}
+
+func Test_Metrics(t *testing.T) {
 
 }
