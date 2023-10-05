@@ -1,6 +1,7 @@
 package memory
 
 import (
+	"log"
 	"sync"
 
 	"github.com/dragtor/urlshortner/domain/url"
@@ -26,17 +27,19 @@ func (mr *MemoryRepository) GetByShortUrl(shortUrl string) (*url.UrlMeta, error)
 	return nil, url.ErrShortURLNotFound
 }
 func (mr *MemoryRepository) Add(urlmeta *url.UrlMeta) error {
-	// make sure that sourceurl is not present
+	log.Println("INFO: inmemory repository adding urlmeta for ", urlmeta.GetSourceUrl())
 	if _, ok := mr.urlMetaStore[urlmeta.GetSourceURLHash()]; ok {
 		return url.ErrShortURLAlreadyPresent
 	}
 	mr.Lock()
 	defer mr.Unlock()
+	log.Println("INFO: Compeleted inmemory repository adding urlmeta for ", urlmeta.GetSourceUrl())
 	mr.urlMetaStore[urlmeta.GetSourceURLHash()] = urlmeta
 	mr.shortUrlStore[urlmeta.GetShortUrl()] = urlmeta
 	return nil
 }
 func (mr *MemoryRepository) GetBySourceUrl(urlHash string) (*url.UrlMeta, error) {
+	log.Println("INFO: inmemory repository fetching source url by urlhash ", urlHash)
 	if urlmeta, ok := mr.urlMetaStore[urlHash]; ok {
 		return urlmeta, nil
 	}

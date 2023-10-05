@@ -2,6 +2,7 @@ package memory
 
 import (
 	"errors"
+	"log"
 	"sort"
 	"sync"
 
@@ -25,6 +26,7 @@ func New() *MemoryRepository {
 }
 
 func (mr *MemoryRepository) GetMetrics(domain string) (*urlmetrics.Metrics, error) {
+	log.Println("INFO: inmemory repository fetching metrics for domain : ", domain)
 	if metrics, ok := mr.domainMetrics[domain]; ok {
 		return metrics, nil
 	}
@@ -32,12 +34,14 @@ func (mr *MemoryRepository) GetMetrics(domain string) (*urlmetrics.Metrics, erro
 }
 
 func (mr *MemoryRepository) SetMetrics(domain string, mtc *urlmetrics.Metrics) error {
+	log.Println("INFO: inmemory repository setting value for metrics for domain ", domain)
 	mr.Lock()
 	defer mr.Unlock()
 	if mtc == nil {
 		return ErrEmptyValue
 	}
 	mr.domainMetrics[domain] = mtc
+	log.Println("INFO: Successfully set up value for domain ", domain)
 	return nil
 }
 
@@ -56,6 +60,7 @@ func (ms MetricsSlice) Less(i, j int) bool {
 }
 
 func (mr *MemoryRepository) GetTopCount(headCount int) ([]*urlmetrics.Metrics, error) {
+	log.Printf("INFO: inmemory repository fetching top count of metrics %d\n", headCount)
 	var metrics []*urlmetrics.Metrics
 	for _, mt := range mr.domainMetrics {
 		metrics = append(metrics, mt)
@@ -64,5 +69,6 @@ func (mr *MemoryRepository) GetTopCount(headCount int) ([]*urlmetrics.Metrics, e
 	if len(metrics) < headCount {
 		return metrics, nil
 	}
+	log.Printf("INFO: Completed inmemory repository fetching top count of metrics")
 	return metrics[:headCount], nil
 }

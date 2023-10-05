@@ -24,6 +24,10 @@ const (
 	EVENT_CREATE_NEW_SHORTURL = "EVENT_CREATE_NEW_SHORTURL"
 )
 
+var (
+	ErrInvalidInput = errors.New("invalid input")
+)
+
 func NewShortnerService(cfgs ...ShortnerConfiguration) (*ShortnerService, error) {
 	ss := &ShortnerService{}
 	for _, cfg := range cfgs {
@@ -49,7 +53,7 @@ const (
 
 func (ss *ShortnerService) validateSourceUrl(sourceURL string) error {
 	if sourceURL == EmptyString {
-		return errors.New("invalid input")
+		return ErrInvalidInput
 	}
 	return nil
 }
@@ -62,48 +66,56 @@ func generateCRC32Encoding(input string) uint32 {
 }
 
 func (ss *ShortnerService) CreateShortUrl(sourceUrl string) (*url.UrlMeta, error) {
+	log.Printf("INFO : creating short url for %s\n", sourceUrl)
 	err := ss.validateSourceUrl(sourceUrl)
 	if err != nil {
+		log.Println("ERROR: ", err)
 		return nil, err
 	}
+	log.Printf("INFO: generating encoded value for %s\n", sourceUrl)
 	crc32Encoding := generateCRC32Encoding(sourceUrl)
 	shortUrl := base62.Encode(int(crc32Encoding))
 	urlmeta, err := url.NewUrlMeta(sourceUrl, shortUrl)
 	if err != nil {
+		log.Println("ERROR: ", err)
 		return nil, err
 	}
 	err = ss.urlMeta.Add(urlmeta)
 	if err == url.ErrShortURLAlreadyPresent {
 		urlmeta, err = ss.urlMeta.GetBySourceUrl(urlmeta.GetSourceURLHash())
 		if err != nil {
+			log.Println("ERROR: ", err)
 			return nil, err
 		}
 		return urlmeta, nil
 	}
 	if err != nil {
+		log.Println("ERROR: ", err)
 		return nil, err
 	}
-	err = ss.UpdateMetrics(EVENT_CREATE_NEW_SHORTURL, sourceUrl)
-	if err != nil {
-		log.Println("Failed to update ")
-	}
+	go ss.UpdateMetrics(EVENT_CREATE_NEW_SHORTURL, sourceUrl)
+
 	return urlmeta, nil
 }
 
 func (ss *ShortnerService) validateShortUrl(url string) error {
 	if url == EmptyString {
-		return errors.New("invalid input")
+		log.Println("ERROR: ", ErrInvalidInput)
+		return ErrInvalidInput
 	}
 	return nil
 }
 
 func (ss *ShortnerService) GetSourceUrlForShortUrl(shortUrl string) (*url.UrlMeta, error) {
+	log.Println("INFO: getting source url for given short url :", shortUrl)
 	err := ss.validateShortUrl(shortUrl)
 	if err != nil {
-		return nil, errors.New("invalid input")
+		log.Println("ERROR: ", err)
+		return nil, ErrInvalidInput
 	}
 	urlmeta, err := ss.urlMeta.GetByShortUrl(shortUrl)
 	if err != nil {
+		log.Println("ERROR: ", err)
 		return nil, err
 	}
 	return urlmeta, nil
@@ -112,6 +124,7 @@ func (ss *ShortnerService) GetSourceUrlForShortUrl(shortUrl string) (*url.UrlMet
 func getDomainName(URL string) (string, error) {
 	parsedURL, err := neturl.Parse(URL)
 	if err != nil {
+		log.Println("ERROR: ", err)
 		return "", err
 	}
 
@@ -119,17 +132,20 @@ func getDomainName(URL string) (string, error) {
 }
 
 func (ss *ShortnerService) GetMetrics(headCount int) ([]*urlmetrics.Metrics, error) {
+	log.Printf("INFO: fetching top metrics %d", headCount)
 	mts, err := ss.urlMetrics.GetTopCount(headCount)
 	if err != nil {
+		log.Println("ERROR: ", err)
 		return nil, err
 	}
 	return mts, nil
 }
 
 func (ss *ShortnerService) UpdateMetrics(event, url string) error {
+	log.Printf("INFO: updating metrics for %s", url)
 	host, err := getDomainName(url)
 	if err != nil {
-		log.Println(err)
+		log.Println("ERROR: ", err)
 		return err
 	}
 	var metrics *urlmetrics.Metrics
@@ -139,20 +155,20 @@ func (ss *ShortnerService) UpdateMetrics(event, url string) error {
 		metrics.IncrementCount()
 		err = ss.urlMetrics.SetMetrics(host, metrics)
 		if err != nil {
-			log.Println(err)
+			log.Println("ERROR: ", err)
 			return err
 		}
 		return nil
 	}
 	metrics, err = ss.urlMetrics.GetMetrics(host)
 	if err != nil {
-		log.Println(err)
+		log.Println("ERROR: ", err)
 		return err
 	}
 	metrics.IncrementCount()
 	err = ss.urlMetrics.SetMetrics(host, metrics)
 	if err != nil {
-		log.Println(err)
+		log.Println("ERROR: ", err)
 		return err
 	}
 	return nil

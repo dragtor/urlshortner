@@ -37,9 +37,11 @@ type MetricsEndpointResponseData struct {
 }
 
 func (api *APIHandler) PostURLShortnerHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("INFO: POST api request for creation of short url")
 	var requestData RequestData
 	decoder := json.NewDecoder(r.Body)
 	if err := decoder.Decode(&requestData); err != nil {
+		log.Println("Error : ", err)
 		httputils.HTTPResponseData(w, false, nil, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -47,6 +49,7 @@ func (api *APIHandler) PostURLShortnerHandler(w http.ResponseWriter, r *http.Req
 
 	urlmeta, err := api.ShortnerService.CreateShortUrl(requestData.Url)
 	if err != nil {
+		log.Println("Error : ", err)
 		httputils.HTTPResponseData(w, false, nil, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -57,11 +60,13 @@ func (api *APIHandler) PostURLShortnerHandler(w http.ResponseWriter, r *http.Req
 }
 
 func (api *APIHandler) RedirectURLHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("INFO : GET api request for shorturl")
 	vars := mux.Vars(r)
 	shortUrl := vars["encoded-url"]
 
 	urlmeta, err := api.ShortnerService.GetSourceUrlForShortUrl(shortUrl)
 	if err != nil {
+		log.Println("Error : ", err)
 		httputils.HTTPResponseData(w, false, nil, err.Error(), http.StatusNotFound)
 		return
 	}
@@ -70,6 +75,7 @@ func (api *APIHandler) RedirectURLHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (api *APIHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	log.Println("INFO: recieved request for healthcheck")
 	httputils.HTTPResponseData(w, true, "ok", "", http.StatusOK)
 }
 
@@ -82,10 +88,12 @@ func (api *APIHandler) GetMetrics(w http.ResponseWriter, r *http.Request) {
 	headCount := queryParams.Get("headcount")
 	headcnt, err := strconv.Atoi(headCount)
 	if err != nil {
+		log.Println("Warning : ", err)
 		headcnt = DEFAULT_HEADCOUNT
 	}
 	metrics, err := api.ShortnerService.GetMetrics(headcnt)
 	if err != nil {
+		log.Println("Error : ", err)
 		httputils.HTTPResponseData(w, true, nil, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -122,6 +130,7 @@ func main() {
 		WriteTimeout: time.Second * 15,
 	}
 
+	log.Println("Starting server")
 	go func() {
 		if err := srv.ListenAndServe(); err != nil {
 			log.Println(err)
