@@ -20,7 +20,7 @@ docker tag app urlshortner:latest
 
 ## Run Server using docker
 ```
-docker run -d -p 8080 urlshortner:latest
+docker run -d -p 8080:8080 urlshortner:latest
 ```
 
 ## API Documentation 
